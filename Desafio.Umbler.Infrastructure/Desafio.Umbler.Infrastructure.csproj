@@ -1,27 +1,29 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+<Project Sdk="Microsoft.NET.Sdk">
+
   <PropertyGroup>
     <TargetFramework>net6.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
   </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="DnsClient" Version="1.6.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="6.0.3" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="6.0.3">
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="6.0.3">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="6.0.1" />
     <PackageReference Include="WhoisClient.NET" Version="3.0.1" />
   </ItemGroup>
+
   <ItemGroup>
-    <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="6.0.1" />
+    <ProjectReference Include="..\Desafio.Umbler.Application\Desafio.Umbler.Application.csproj" />
+    <ProjectReference Include="..\Desafio.Umbler.Domain\Desafio.Umbler.Domain.csproj" />
   </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\..\Desafio.Umbler.Application\Desafio.Umbler.Application.csproj" />
-    <ProjectReference Include="..\..\Desafio.Umbler.Infrastructure\Desafio.Umbler.Infrastructure.csproj" />
-  </ItemGroup>
-  <ItemGroup>
-    <Folder Include="Models\" />
-  </ItemGroup>
+
 </Project>
