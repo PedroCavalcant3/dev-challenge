@@ -1,48 +1,68 @@
 ﻿@page "/"
-@page "/home"
 @using Desafio.Umbler.Application.DTOs
 @using Desafio.Umbler.Application.Exceptions
 @using Desafio.Umbler.Application.Interfaces
+@using System.Text.RegularExpressions
 @inject IDomainService DomainService
 
-<h3>Consulta de DNS</h3>
+<h3 class="text-center mb-4">Consulta de DNS</h3>
 
 <div class="container py-4">
     <div class="row">
         <div class="col-lg-9 col-md-8">
-            <input class="form-control form-control-lg"
+            @* Adicionado @onkeyup para permitir pesquisa com a tecla Enter *@
+            <input class="form-control form-control-lg @(inputClass)"
                    placeholder="Digite o Domínio que deseja pesquisar"
-                   @bind="_domain" />
+                   @bind="_domain"
+                   @bind:event="oninput"
+                   @onkeyup="HandleKeyUp" />
         </div>
 
         <div class="col-lg-3 col-md-4">
-            <button class="btn btn-success btn-block btn-lg"
+            @* Removido o disabled baseado na validação, mantendo apenas para o loading *@
+            <button class="btn btn-success w-100 btn-lg"
                     @onclick="SearchAsync"
-                    disabled="@(_loading || !IsValidDomain(_domain))">
-                @(_loading ? "Pesquisando..." : "Pesquisar...")
+                    disabled="@_loading">
+                @if (_loading)
+                {
+                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                    <span> Pesquisando...</span>
+                }
+                else
+                {
+                    <span>Pesquisar</span>
+                }
             </button>
         </div>
     </div>
 
+    @* Exibição de erros amigável *@
     @if (_error is not null)
     {
-        <div class="alert alert-danger mt-3">
-            <b>@_error.Code</b>: @_error.Message
+        <div class="alert alert-warning alert-dismissible fade show mt-3" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+            <strong>Atenção:</strong> @_error.Message
+            <button type="button" class="btn-close" @onclick="() => _error = null"></button>
         </div>
     }
 
+    @* Resultado da Pesquisa *@
     @if (_result is not null)
     {
-        <div class="mt-4">
-            <div class="card">
+        <div class="mt-4 animate__animated animate__fadeIn">
+            <div class="card shadow-sm">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0">Dados do Domínio: @_result.Name</h5>
+                </div>
                 <div class="card-body">
-                    <p><b>Domínio:</b> @_result.Name</p>
-                    <p><b>IP:</b> @_result.Ip</p>
-                    <p><b>Hospedado em:</b> @_result.HostedAt</p>
-
-                    <details>
-                        <summary><b>WHOIS</b></summary>
-                        <pre style="white-space: pre-wrap;">@_result.WhoIs</pre>
+                    <div class="row">
+                        <div class="col-sm-4"><b>IP:</b> @_result.Ip</div>
+                        <div class="col-sm-8"><b>Hospedado em:</b> @_result.HostedAt</div>
+                    </div>
+                    <hr />
+                    <details class="mt-2">
+                        <summary class="btn btn-outline-secondary btn-sm">Ver WHOIS completo</summary>
+                        <pre class="mt-3 p-3 bg-light border rounded" style="white-space: pre-wrap; font-size: 0.85rem;">@_result.WhoIs</pre>
                     </details>
                 </div>
             </div>
@@ -55,20 +75,26 @@
     private bool _loading;
     private DomainInfoDto? _result;
     private UiError? _error;
+    private string inputClass = "";
+
+    private async Task HandleKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await SearchAsync();
+    }
 
     private async Task SearchAsync()
     {
         _error = null;
         _result = null;
+        inputClass = "";
 
         var domain = (_domain ?? "").Trim().ToLowerInvariant();
-       
+
+        // Validação Client-Side com Regex
         if (!IsValidDomain(domain))
         {
-            _error = new UiError(
-                "invalid_domain",
-                "Informe um domínio válido. Ex: umbler.com"
-            );
+            inputClass = "is-invalid";
+            _error = new UiError("invalid_input", "Por favor, insira um domínio válido (ex: google.com ou umbler.com.br).");
             return;
         }
 
@@ -76,18 +102,20 @@
         try
         {
             _result = await DomainService.GetAsync(domain);
+            inputClass = "is-valid";
         }
         catch (InvalidDomainException ex)
         {
             _error = new UiError("invalid_domain", ex.Message);
+            inputClass = "is-invalid";
         }
         catch (ExternalLookupException ex)
         {
-            _error = new UiError("external_service_unavailable", ex.Message);
+            _error = new UiError("external_service_unavailable", "Não foi possível consultar os dados externos agora. Tente novamente em instantes.");
         }
-        catch
+        catch (Exception)
         {
-            _error = new UiError("unexpected_error", "Ocorreu um erro inesperado.");
+            _error = new UiError("unexpected_error", "Ocorreu um erro inesperado no servidor.");
         }
         finally
         {
@@ -97,19 +125,12 @@
 
     private static bool IsValidDomain(string domain)
     {
-        if (string.IsNullOrWhiteSpace(domain))
-            return false;
+        if (string.IsNullOrWhiteSpace(domain)) return false;
 
-        if (!domain.Contains('.'))
-            return false;
+        // Regex para validar domínio       
+        var regex = new Regex(@"^(?!-)[A-Za-z0-9-]+([\-\.]{1}[a-z0-9]+)*\.[A-Za-z]{2,63}$");
 
-        if (domain.StartsWith('.') || domain.EndsWith('.'))
-            return false;
-
-        if (domain.Contains(" "))
-            return false;
-
-        return true;
+        return regex.IsMatch(domain);
     }
 
     public record UiError(string Code, string Message);
