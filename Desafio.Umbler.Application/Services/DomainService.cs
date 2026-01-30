@@ -1,4 +1,5 @@
 ﻿using Desafio.Umbler.Application.DTOs;
+using Desafio.Umbler.Application.Exceptions;
 using Desafio.Umbler.Application.Interfaces;
 using Desafio.Umbler.Domain.Entities;
 
@@ -20,7 +21,7 @@ public class DomainService : IDomainService
     public async Task<DomainInfoDto> GetAsync(string domainName, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(domainName) || !domainName.Contains('.'))
-            throw new ArgumentException("Nome de domínio inválido");
+            throw new InvalidDomainException("Domínio inválido. Ex: umbler.com");
 
         var domain = await _data.GetByNameAsync(domainName, ct);
 
@@ -47,44 +48,78 @@ public class DomainService : IDomainService
 
     private async Task<DomainInfo> CreateAsync(string domainName, CancellationToken ct)
     {
-        var whoisDomain = await _whois.QueryAsync(domainName, ct);
-        var dns = await _dns.GetARecordAsync(domainName, ct);
-
-        if (string.IsNullOrWhiteSpace(dns.Ip))
-            throw new InvalidOperationException("Nenhum registro encontrado para este domínio.");
-
-        var whoisIp = await _whois.QueryAsync(dns.Ip, ct);
-
-        return new DomainInfo
+        try
         {
-            Name = domainName,
-            Ip = dns.Ip,
-            UpdatedAt = DateTime.UtcNow,
-            WhoIs = whoisDomain.Raw,
-            Ttl = dns.TtlSeconds > int.MaxValue
-            ? int.MaxValue
-            : (int)dns.TtlSeconds,
-            HostedAt = whoisIp.OrganizationName
-        };
+            var whoisDomain = await _whois.QueryAsync(domainName, ct);
+            var dns = await _dns.GetARecordAsync(domainName, ct);
+
+            if (string.IsNullOrWhiteSpace(dns.Ip))
+                throw new InvalidDomainException("Nenhum registro A encontrado para este domínio.");
+
+            var whoisIp = await _whois.QueryAsync(dns.Ip, ct);
+
+            return new DomainInfo
+            {
+                Name = domainName,
+                Ip = dns.Ip,
+                UpdatedAt = DateTime.UtcNow,
+                WhoIs = whoisDomain.Raw,
+                Ttl = dns.TtlSeconds > int.MaxValue ? int.MaxValue : (int)dns.TtlSeconds,
+                HostedAt = whoisIp.OrganizationName
+            };
+        }
+
+        //Exceptions ja lançadas na Infra são repassadas aqui
+        catch (InvalidDomainException)
+        {
+            throw;
+        }       
+        catch (ExternalLookupException)
+        {
+            throw;
+        }
+
+        catch (Exception ex)
+        {
+            // WHOIS ou qualquer falha externa inesperada
+            throw new ExternalLookupException("WHOIS", "Falha ao consultar WHOIS.", ex);
+        }
     }
 
     private async Task RefreshAsync(DomainInfo domain, string domainName, CancellationToken ct)
     {
-        var whoisDomain = await _whois.QueryAsync(domainName, ct);
-        var dns = await _dns.GetARecordAsync(domainName, ct);
+        try
+        {
+            var whoisDomain = await _whois.QueryAsync(domainName, ct);
+            var dns = await _dns.GetARecordAsync(domainName, ct);
 
-        if (string.IsNullOrWhiteSpace(dns.Ip))
-            throw new InvalidOperationException("Nenhum registro encontrado para este domínio.");
+            if (string.IsNullOrWhiteSpace(dns.Ip))
+                throw new InvalidDomainException("Nenhum registro A encontrado para este domínio.");
 
-        var whoisIp = await _whois.QueryAsync(dns.Ip, ct);
+            var whoisIp = await _whois.QueryAsync(dns.Ip, ct);
 
-        domain.Ip = dns.Ip;
-        domain.UpdatedAt = DateTime.UtcNow;
-        domain.WhoIs = whoisDomain.Raw;
-        domain.Ttl = dns.TtlSeconds > int.MaxValue
-            ? int.MaxValue
-            : (int)dns.TtlSeconds;
-        domain.HostedAt = whoisIp.OrganizationName;
+            domain.Ip = dns.Ip;
+            domain.UpdatedAt = DateTime.UtcNow;
+            domain.WhoIs = whoisDomain.Raw;
+            domain.Ttl = dns.TtlSeconds > int.MaxValue ? int.MaxValue : (int)dns.TtlSeconds;
+            domain.HostedAt = whoisIp.OrganizationName;
+        }
+        catch (InvalidDomainException)
+        {
+            throw;
+        }
+        catch (OperationCanceledException ex)
+        {
+            throw new ExternalLookupException("DNS/WHOIS", "Timeout ao consultar serviços externos.", ex);
+        }
+        //catch (DnsResponseException ex)
+        //{
+        //    throw new ExternalLookupException("DNS", "Falha ao consultar DNS.", ex);
+        //}
+        catch (Exception ex)
+        {
+            throw new ExternalLookupException("WHOIS", "Falha ao consultar WHOIS.", ex);
+        }
     }
 }
 

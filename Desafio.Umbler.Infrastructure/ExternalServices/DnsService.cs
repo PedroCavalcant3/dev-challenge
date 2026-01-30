@@ -1,4 +1,6 @@
-﻿using Desafio.Umbler.Application.Interfaces;
+﻿using Desafio.Umbler.Application.Exceptions;
+using Desafio.Umbler.Application.Interfaces;
+using DnsClient;
 
 namespace Desafio.Umbler.Infrastructure.ExternalServices;
 
@@ -13,12 +15,23 @@ public class DnsService : IDnsService
 
     public async Task<DnsLookupResult> GetARecordAsync(string domainName, CancellationToken ct = default)
     {
-        var result = await _lookup.QueryAsync(domainName, DnsClient.QueryType.A, DnsClient.QueryClass.IN, ct);
-        var record = result.Answers.ARecords().FirstOrDefault();
+        try
+        {
+            var result = await _lookup.QueryAsync(domainName, QueryType.A, QueryClass.IN, ct);
+            var record = result.Answers.ARecords().FirstOrDefault();
 
-        return new DnsLookupResult(
-            record?.Address?.ToString(),
-            record?.TimeToLive ?? 0
-        );
+            return new DnsLookupResult(
+                record?.Address?.ToString(),
+                record?.TimeToLive ?? 0
+            );
+        }
+        catch (DnsResponseException ex)
+        {
+            throw new ExternalLookupException("DNS", "Falha ao consultar DNS.", ex);
+        }
+        catch (OperationCanceledException ex)
+        {
+            throw new ExternalLookupException("DNS", "Timeout ao consultar DNS.", ex);
+        }
     }
 }
