@@ -1,0 +1,116 @@
+﻿@page "/"
+@page "/home"
+@using Desafio.Umbler.Application.DTOs
+@using Desafio.Umbler.Application.Exceptions
+@using Desafio.Umbler.Application.Interfaces
+@inject IDomainService DomainService
+
+<h3>Consulta de DNS</h3>
+
+<div class="container py-4">
+    <div class="row">
+        <div class="col-lg-9 col-md-8">
+            <input class="form-control form-control-lg"
+                   placeholder="Digite o Domínio que deseja pesquisar"
+                   @bind="_domain" />
+        </div>
+
+        <div class="col-lg-3 col-md-4">
+            <button class="btn btn-success btn-block btn-lg"
+                    @onclick="SearchAsync"
+                    disabled="@(_loading || !IsValidDomain(_domain))">
+                @(_loading ? "Pesquisando..." : "Pesquisar...")
+            </button>
+        </div>
+    </div>
+
+    @if (_error is not null)
+    {
+        <div class="alert alert-danger mt-3">
+            <b>@_error.Code</b>: @_error.Message
+        </div>
+    }
+
+    @if (_result is not null)
+    {
+        <div class="mt-4">
+            <div class="card">
+                <div class="card-body">
+                    <p><b>Domínio:</b> @_result.Name</p>
+                    <p><b>IP:</b> @_result.Ip</p>
+                    <p><b>Hospedado em:</b> @_result.HostedAt</p>
+
+                    <details>
+                        <summary><b>WHOIS</b></summary>
+                        <pre style="white-space: pre-wrap;">@_result.WhoIs</pre>
+                    </details>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private string _domain = "";
+    private bool _loading;
+    private DomainInfoDto? _result;
+    private UiError? _error;
+
+    private async Task SearchAsync()
+    {
+        _error = null;
+        _result = null;
+
+        var domain = (_domain ?? "").Trim().ToLowerInvariant();
+       
+        if (!IsValidDomain(domain))
+        {
+            _error = new UiError(
+                "invalid_domain",
+                "Informe um domínio válido. Ex: umbler.com"
+            );
+            return;
+        }
+
+        _loading = true;
+        try
+        {
+            _result = await DomainService.GetAsync(domain);
+        }
+        catch (InvalidDomainException ex)
+        {
+            _error = new UiError("invalid_domain", ex.Message);
+        }
+        catch (ExternalLookupException ex)
+        {
+            _error = new UiError("external_service_unavailable", ex.Message);
+        }
+        catch
+        {
+            _error = new UiError("unexpected_error", "Ocorreu um erro inesperado.");
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private static bool IsValidDomain(string domain)
+    {
+        if (string.IsNullOrWhiteSpace(domain))
+            return false;
+
+        if (!domain.Contains('.'))
+            return false;
+
+        if (domain.StartsWith('.') || domain.EndsWith('.'))
+            return false;
+
+        if (domain.Contains(" "))
+            return false;
+
+        return true;
+    }
+
+    public record UiError(string Code, string Message);
+}
