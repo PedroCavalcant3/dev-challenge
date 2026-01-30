@@ -54,7 +54,7 @@ public class DomainService : IDomainService
             var dns = await _dns.GetARecordAsync(domainName, ct);
 
             if (string.IsNullOrWhiteSpace(dns.Ip))
-                throw new InvalidDomainException("Nenhum registro A encontrado para este domínio.");
+                throw new InvalidDomainException("Nenhum registro encontrado para este domínio.");
 
             var whoisIp = await _whois.QueryAsync(dns.Ip, ct);
 
@@ -64,8 +64,8 @@ public class DomainService : IDomainService
                 Ip = dns.Ip,
                 UpdatedAt = DateTime.UtcNow,
                 WhoIs = whoisDomain.Raw,
-                Ttl = dns.TtlSeconds > int.MaxValue ? int.MaxValue : (int)dns.TtlSeconds,
-                HostedAt = whoisIp.OrganizationName
+                Ttl = dns.TtlSeconds,
+                HostedAt = whoisIp.OrganizationName ?? "Desconhecido"
             };
         }
 
@@ -73,7 +73,7 @@ public class DomainService : IDomainService
         catch (InvalidDomainException)
         {
             throw;
-        }       
+        }
         catch (ExternalLookupException)
         {
             throw;
@@ -94,15 +94,15 @@ public class DomainService : IDomainService
             var dns = await _dns.GetARecordAsync(domainName, ct);
 
             if (string.IsNullOrWhiteSpace(dns.Ip))
-                throw new InvalidDomainException("Nenhum registro A encontrado para este domínio.");
+                throw new InvalidDomainException("Nenhum registro encontrado para este domínio.");
 
             var whoisIp = await _whois.QueryAsync(dns.Ip, ct);
 
             domain.Ip = dns.Ip;
             domain.UpdatedAt = DateTime.UtcNow;
             domain.WhoIs = whoisDomain.Raw;
-            domain.Ttl = dns.TtlSeconds > int.MaxValue ? int.MaxValue : (int)dns.TtlSeconds;
-            domain.HostedAt = whoisIp.OrganizationName;
+            domain.Ttl = dns.TtlSeconds;
+            domain.HostedAt = whoisIp.OrganizationName ?? "Desconhecido";
         }
         catch (InvalidDomainException)
         {
@@ -112,10 +112,7 @@ public class DomainService : IDomainService
         {
             throw new ExternalLookupException("DNS/WHOIS", "Timeout ao consultar serviços externos.", ex);
         }
-        //catch (DnsResponseException ex)
-        //{
-        //    throw new ExternalLookupException("DNS", "Falha ao consultar DNS.", ex);
-        //}
+
         catch (Exception ex)
         {
             throw new ExternalLookupException("WHOIS", "Falha ao consultar WHOIS.", ex);

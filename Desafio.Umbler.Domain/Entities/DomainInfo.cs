@@ -15,6 +15,6 @@ public class DomainInfo
     public string Ip { get; set; }
     public DateTime UpdatedAt { get; set; }
     public string WhoIs { get; set; }
-    public int Ttl { get; set; }
+    public long Ttl { get; set; }
     public string HostedAt { get; set; }
 }
