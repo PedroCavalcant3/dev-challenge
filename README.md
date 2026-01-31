@@ -110,7 +110,7 @@ Divisão utilizando Class Library, boa pratica que evita acumalar packages e ref
   * Implementações concretas. Inclui o `DatabaseContext`, acesso a dados(Get, Add, Save) (`DataAccess`), Migrations e Serviços Externos (`DnsService`, `WhoisService`).
 * **`Desafio.Umbler.Web` (Blazor Server App)**
   * Camada de apresentação híbrida:
-    * **API:** DomainControlle para consumo externo com os testes.
+    * **API:** DomainController para consumo externo com os testes.
     * **UI:** Blazor Server Pages, requisitando o DomainService diretamente para maior eficiência.
 * **`Desafio.Umbler.Tests` **
   * 9 Testes unitários(3 novos).
@@ -213,10 +213,16 @@ O arquivo `Program.cs` foi modificado para atuar como o ponto central de composi
 
 ---
 
-## Como Rodar no (Visual Studio)
+## Como Rodar o projeto no (Visual Studio)
 * Certifique-se de estar na branch **`challenge-sollution`**
 * O projeto Razor Web 'Desafio.Umbler.Web' deve ser setado como StartupProject.
-* Para rodar as migrations, basta abrir o Package Manager Console, selecionar como Default Project o Desafio.Umbler.Infraestructure e dar o comando `dotnet restore` para carregar as depêndencias e pacotes, depois dê o comando `update-database`.
+
+### Via Terminal/PowerShell:
+* Certifique-se de estar com o **`.NET 6.0 SDK`** instalado: clique com o botão direito na Solution(raiz do projeto) > abrir com o terminal, utilize o comando: **`dotnet ef --version`**. Caso você esteja com uma versão maior que 6, recomendo que desinstale, usando: **`dotnet tool uninstall --global dotnet-ef`** e instale a seguinte versão: **`dotnet tool install --global dotnet-ef --version 6.0.0`**. Após isso, verifique a versão instalada com: **`dotnet ef --version`**, caso esteja correta, use: **`dotnet restore`** para baixar todas as dependências do projeto e, finalmente, execute o comando para rodar as migrations: **`dotnet ef database update --project Desafio.Umbler.Infrastructure --startup-project Desafio.Umbler.Web`**.
+
+### Via Package Manager Console (Desafio.Umbler.Infraestructure):
+* Para rodar as migrations, abra o Package Manager Console, selecione como Default Project: `Desafio.Umbler.Infraestructure`, execute o comando `dotnet restore` para baixar todas as dependências do projeto e, por fim dê o comando `update-database`.
+---
 * Após rodar as migrations, de o comando `dotnet run` no Terminal/PowerShell do projeto Desafio.Umbler.Web (ou clique em "play" no editor do Visual Studio).
 * String de conexão referente ao MySql oferecido pelo site PHP gratuito no app da Umbler https://app.umbler.com/ que oferece o banco Mysql adicionamente), o meu banco permanecerá ligado até 05/02/26.
 
