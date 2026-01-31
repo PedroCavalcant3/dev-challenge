@@ -93,4 +93,133 @@ Se você rodar o projeto e testar um domínio, verá que ele já está funcionan
 
 # Modificações:
 
-- DESCREVA AQUI O OBJETIVO DAS MODIFICAÇÕES...
+### 1. Arquitetura
+O projeto foi reestruturado adotando uma **Clean Architecture Simplificada**.
+Optei por não utilizar o *Repository Pattern* pois não havia necessidade. O acesso a dados é feito diretamente pelos Serviços de Aplicação, mantendo a separação de responsabilidades e reduzindo drasticamente a complexidade ciclomática.
+
+Essa modificação resultou em um código altamente organizado, desacoplado e testável.
+
+### Nova Estrutura da Solução
+
+Divisão utilizando Class Library, boa pratica que evita acumalar packages e referenciar projetos sem necessidade:
+* **`Desafio.Umbler.Domain` (Class Library)**
+  * Contém a Entidade do negócio (`DomainInfo`).
+* **`Desafio.Umbler.Application` (Class Library)**
+  * Regras de Negócio de Aplicação e inteligência `DomainService`), DTOs, Interfaces e Exceções de negócio.
+* **`Desafio.Umbler.Infrastructure` (Class Library)**
+  * Implementações concretas. Inclui o `DatabaseContext`, acesso a dados(Get, Add, Save) (`DataAccess`), Migrations e Serviços Externos (`DnsService`, `WhoisService`).
+* **`Desafio.Umbler.Web` (Blazor Server App)**
+  * Camada de apresentação híbrida:
+    * **API:** DomainControlle para consumo externo com os testes.
+    * **UI:** Blazor Server Pages, requisitando o DomainService diretamente para maior eficiência.
+* **`Desafio.Umbler.Tests` **
+  * 9 Testes unitários(3 novos).
+
+---
+
+## 2. DataAccess e ExternalServices
+As consultas de **DNS** e **WHOIS** e os comportamentos da applicação foram extraídas para serviços dedicados e abstraídas por interfaces (`DnsService`, `WhoisService`, `DomainDataAccess`).
+
+**Benefícios:**
+* **Desacoplamento:** A lógica de negócio não sabe qual biblioteca está sendo usada para buscar o DNS.
+* **Testabilidade:** Permite o uso de **Mocks** (via biblioteca *Moq*) para simular cenários de rede, timeouts e falhas.
+
+---
+
+## 3. Testes Unitários
+Os testes que ja existiam foram refatorados com base na nova arquitetura, toda a lógica foi preservada.
+
+* **3 novos testes**
+  1. **Domínio Inválido:** Deve lançar exceção de negócio.
+  2. **Cache Válido:** Se o domínio existe e o TTL não expirou, **não** deve chamar serviços externos.
+  3. **Cache Expirado:** Se o TTL expirou, **deve** chamar serviços externos para atualização (Refresh).
+* **Ferramentas:** Uso de `Moq` para isolar dependências externas.
+
+---
+
+## 4. Controller
+Por conta da reestruturação, houve uma redução drástica na complexidade e acoplamento do DomainController tornando ele muito eficiente e testavel.
+O Controller agora apenas:
+* Valida a entrada básica.
+* Requisita o `IDomainService`.
+* Traduz exceções de domínio para Status Codes HTTP (400, 500, 503).
+
+---
+
+## 5. DTOs
+O backend deixou de expor a entidade de banco de dados diretamente. Foi introduzido o `DomainInfoDto` para:
+* Segurança e performance: Oculta dados os internos `Id`, `UpdatedAt` e '`TTL`', trazendo apenas os dados necessários para a visualização.
+
+---
+
+## 6. Tratamento de Erros
+Implementação de um fluxo robusto de exceções mapeadas para respostas HTTP adequadas:
+
+| Exceção | Status HTTP | Significado |
+| :--- | :--- | :--- |
+| `InvalidDomainException` | **400 Bad Request** | Erro de validação do usuário. |
+| `ExternalLookupException`, `DnsResponseException`, `OperationCanceledException` | **503 Service Unavailable** | Falha ou timeout em APIs externas (DNS/WHOIS). |
+| `Exception` (Genérica) | **500 Internal Server Error** | Erro inesperado (sem vazar stack trace). |
+
+---
+
+## 7. Frontend (Blazor Server)
+Utilização do framework **Blazor Server**, permitindo uma interface reativa e moderna.
+
+### Fluxo Otimizado
+O componente Blazor permitiu requisição direta ao serviço, sem precisar passar pelo Controller. Mantivemos o DomainController na raiz do projeto web para ser usado como API e consumida pelos testes unitários.
+Com ele, melhoraramos facilmente o fluxo do sistema:
+* **Antigo:** `JS/View` → `HTTP Request` → `Controller` → `Service` → Infra / DNS / WHOIS / DB
+* **Novo:** `Blazor Page` → `requisição IDomainService` → `Service` → Infra / DNS / WHOIS / DB
+
+### Melhorias de UX/UI
+* **Validação Client-Side:** Regex instantâneo impede o envio de qualquer formato/caracter inválidos.
+* Indicador de carregamento e mensagens de erro evidentes.
+* **Design:** Formatação e disposição dos dados de forma organizada e legível com um básico BootStrap.
+
+---
+
+## 8. Configuração e Inicialização (Desafio.Umbler.Wev > `Program.cs`)
+
+O arquivo `Program.cs` foi modificado para atuar como o ponto central de composição da aplicação, aplicando a injeção de dependências e a conexão com o banco de dados.
+
+### Adaptações Realizadas:
+
+* **Banco de Dados (EF Core):**
+    Configuração do `DatabaseContext` utilizando o provider `Pomelo.EntityFrameworkCore.MySql`. Foi definido explicitamente a versão do servidor e, crucialmente, configurado o `MigrationsAssembly` para apontar para o projeto `Infrastructure`, garantindo que as migrações sejam localizadas corretamente fora do projeto Web.
+
+* **Injeção de Dependência:**
+    Todos os serviços e interfaces foram registrados no Program.cs, garantindo o isolamento de dados entre usuários:
+    * `IDomainService` → `DomainService`
+    * `IDnsService` → `DnsService`
+    * `IWhoisService` → `WhoisService`
+    * `IDomainDataAccess` → `DomainDataAccess`
+
+* **Cliente DNS:**
+    O `ILookupClient` (DnsClient) precisou ser registrado como Singleton para que funcionasse e garante otimização.
+    
+   ### Observações pessoais:
+   Tive um timeout de DNS por conta do meu ambiente local (IPv6/DNS), pesquisando, foi-me recomendado forçar DNS público para estabilizar.
+    Mas, a melhor solução foi modificar o parâmetro da função DnsClient.QueryType.ANY para 'DnsClient.QueryType.A na função GetARecordAsync da classe DnsService.cs, Essa modificação 
+    resulta em uma consulta DNS mais rápida e específica, reduzindo a probabilidade de timeouts.
+
+    Identifiquei que a versão original do projeto tratava o TTL do DNS em minutos(TotalMinutes), o que é errado pois o TTL é definido em segundos como informado no tópico retorno desse Readme. No DomainController o calculo ocorria desssa forma:
+    DateTime.Now.Subtract(domain.UpdatedAt).**TotalMinutes** > domain.Ttl
+    Corrigi, ficando assim: (DateTime.UtcNow - domain.UpdatedAt).**TotalSeconds** > domain.Tt
+    Garantindo que o cache expire no momento exato determinado pela autoridade de DNS.
+
+    Uma das dependências do projeto web inicial era o NodeJs v17.6.0 para  "buildar" o FrontEnd, mas essa versão não existe mais e, não está disponivel para download. Assim, testando com qualquer versão superior
+    o front simplismente não builda, e por algum motivo particular com a versão anterior mais próxima tambem não.
+
+---
+
+## Como Rodar no (Visual Studio)
+* Certifique-se de estar na branch **`challenge-sollution`**
+* O projeto Razor Web 'Desafio.Umbler.Web' deve ser setado como StartupProject.
+* Para rodar as migrations, basta abrir o Package Manager Console, selecionar como Default Project o Desafio.Umbler.Infraestructure e dar o comando `dotnet restore` para carregar as depêndencias e pacotes, depois dê o comando `update-database`.
+* Após rodar as migrations, de o comando `dotnet run` no Terminal/PowerShell do projeto Desafio.Umbler.Web (ou clique em "play" no editor do Visual Studio).
+* String de conexão referente ao MySql oferecido pelo site PHP gratuito no app da Umbler https://app.umbler.com/ que oferece o banco Mysql adicionamente), o meu banco permanecerá ligado até 05/02/26.
+
+
+
+
